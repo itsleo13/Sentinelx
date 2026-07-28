@@ -1,0 +1,7 @@
+========== SENTINELX REPORT ==========
+Target: flipkart.com
+Open Ports: 1
+Time Taken: 100.70 seconds
+
+Open Ports List:
+- Port (80, 'http')
