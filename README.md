@@ -1,86 +1,33 @@
-# SentinelX - TCP Port Scanner
+# SentinelX - AI-Powered Network Security Scanner & Profiler
 
-SentinelX is a Python-based TCP Port Scanner that scans a target IP address or domain to identify open TCP ports and their associated services.
+SentinelX is an advanced, modular network reconnaissance and intelligence scanner. Beyond standard TCP port scanning, SentinelX integrates machine learning models, banner intelligence, automated rule engines, and correlation analysis to deliver real-time service risk profiles and actionable security insights.
 
-## Features
+---
 
-- TCP Port Scanning
-- Service Detection
-- Colored Terminal Output
-- Scan Summary
-- Save Scan Report
-- Simple CLI Interface
+## Key Features
 
-## Technologies Used
+- **Fast TCP Discovery:** High-speed network port enumeration and active host discovery.
+- **Banner Intelligence:** In-depth service fingerprinting and version reconnaissance.
+- **Machine Learning Profiler:** Predictive service analysis and automated anomaly classification (`ml_analyzer`, `host_ml_engine`).
+- **Heuristic Rule & Risk Engine:** Severity scoring and risk classification per detected service.
+- **State Change Detection:** Tracks differences across consecutive scans against target environments.
+- **Executive Reporting & Dashboard:** Detailed scan logs and automated dashboard report generation.
 
-- Python
-- Socket Programming
-- Colorama
-- TQDM
+---
 
-## Project Structure
+## Architecture Overview
 
-```
-PortScanner/
-│── scanner.py
-│── banner.py
-│── services.py
-│── file_handler.py
-│── utils.py
-│── requirements.txt
-│── README.md
-│── results/
-```
-
-## Installation
-
-Clone the repository
-
-```bash
-git clone https://github.com/itsleo13/Sentinelx.git
-```
-
-Go to the project directory
-
-```bash
-cd PortScanner
-```
-
-Install dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-Run the scanner
-
-```bash
-python scanner.py
-```
-
-## Example
-
-```
-Enter Target IP or Domain: scanme.nmap.org
-Enter Start Port: 20
-Enter End Port: 100
-```
-
-Output
-
-```
-Port 22   OPEN   ssh
-Port 80   OPEN   http
-```
-
-## Future Improvements
-
-- Banner Grabbing
-- Multi-threaded Scanning
-- GUI Version
-- PDF Report Generation
-- AI-based Security Recommendations
-
-## Author
-
-**Leo**
+```text
+SentinelX/
+├── scanner.py                 # Core scan orchestrator
+├── discovery.py               # Host and network discovery
+├── services.py                # Known port-to-service mapping
+├── banner_intelligence.py     # Service banner retrieval & parsing
+├── host_profiler.py           # Host fingerprinting engine
+├── host_ml_engine.py          # Machine learning classification
+├── correlation_engine.py      # Cross-service alert correlation
+├── rule_engine.py             # Security rule validation
+├── service_risk_engine.py     # Risk and severity scoring
+├── change_detector.py         # Historical state tracking
+├── report_dashboard.py        # Scan reporting and exports
+└── config.py                  # Global scanner configuration
