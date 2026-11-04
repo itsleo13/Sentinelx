@@ -1,73 +1,2360 @@
 import socket
 import time
+# ============================================================
+# SENTINELX TERMINAL UI
+# ============================================================
 
-from colorama import init
+UI_WIDTH = 68
+
+
+def ui_border(title=None):
+
+    if title:
+        print(
+            Fore.CYAN
+            + "╔"
+            + "═" * UI_WIDTH
+            + "╗"
+            + Style.RESET_ALL
+        )
+
+        text = f" {title.upper()} "
+        print(
+            Fore.CYAN
+            + "║"
+            + Style.RESET_ALL
+            + Style.BRIGHT
+            + text.center(UI_WIDTH)
+            + Style.RESET_ALL
+            + Fore.CYAN
+            + "║"
+            + Style.RESET_ALL
+        )
+
+        print(
+            Fore.CYAN
+            + "╠"
+            + "═" * UI_WIDTH
+            + "╣"
+            + Style.RESET_ALL
+        )
+
+    else:
+        print(
+            Fore.CYAN
+            + "╠"
+            + "═" * UI_WIDTH
+            + "╣"
+            + Style.RESET_ALL
+        )
+
+
+def ui_line(text="", color=""):
+
+    clean_text = str(text)
+
+    if len(clean_text) > UI_WIDTH:
+        clean_text = clean_text[:UI_WIDTH]
+
+    print(
+        Fore.CYAN
+        + "║"
+        + Style.RESET_ALL
+        + color
+        + clean_text.ljust(UI_WIDTH)
+        + Style.RESET_ALL
+        + Fore.CYAN
+        + "║"
+        + Style.RESET_ALL
+    )
+
+
+def ui_end():
+
+    print(
+        Fore.CYAN
+        + "╚"
+        + "═" * UI_WIDTH
+        + "╝"
+        + Style.RESET_ALL
+    )
+
+
+def ui_section(title):
+
+    print()
+
+    print(
+        Fore.CYAN
+        + "╔"
+        + "═" * UI_WIDTH
+        + "╗"
+        + Style.RESET_ALL
+    )
+
+    ui_line(
+        title.center(UI_WIDTH),
+        Fore.WHITE + Style.BRIGHT
+    )
+
+    print(
+        Fore.CYAN
+        + "╚"
+        + "═" * UI_WIDTH
+        + "╝"
+        + Style.RESET_ALL
+    )
+
+
+def get_risk_color(risk_level):
+
+    risk_level = str(risk_level).lower()
+
+    if risk_level == "critical":
+        return Fore.RED + Style.BRIGHT
+
+    if risk_level == "high":
+        return Fore.RED
+
+    if risk_level == "medium":
+        return Fore.YELLOW + Style.BRIGHT
+
+    if risk_level == "low":
+        return Fore.GREEN
+
+    return Fore.CYAN
+
+
+def print_scan_target_panel(
+    target,
+    resolved_ip,
+    hostname,
+    hostname_source,
+    profile,
+    start_port,
+    end_port
+):
+
+    print()
+
+    ui_border("Scan Target")
+
+    ui_line(
+        f" TARGET       : {target}",
+        Fore.WHITE + Style.BRIGHT
+    )
+
+    ui_line(
+        f" RESOLVED IP  : {resolved_ip}",
+        Fore.GREEN
+    )
+
+    ui_line(
+        f" HOSTNAME     : {hostname}",
+        Fore.WHITE
+    )
+
+    ui_line(
+        f" IDENTITY SRC : {hostname_source}",
+        Fore.WHITE
+    )
+
+    ui_line()
+
+    ui_line(
+        f" PROFILE      : {profile.upper()}",
+        Fore.YELLOW
+    )
+
+    ui_line(
+        f" PORT RANGE   : {start_port} - {end_port}",
+        Fore.YELLOW
+    )
+
+    ui_end()
+
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+from colorama import Fore, Style, init
+
 from banner import show_banner
-from services import get_service_name
-from file_handler import save_report
+
+from config import (
+    DEFAULT_TIMEOUT,
+    DEFAULT_WORKERS,
+    PROFILES
+)
+
+from services import (
+    get_service_name,
+    get_banner
+)
+
+from analyzer import (
+    analyze_scan,
+    calculate_risk,
+    get_top_findings,
+    deduplicate_findings
+)
+
+from rule_engine import evaluate_port
+
+from ml_analyzer import analyze_with_history
+
+from hybrid_engine import generate_hybrid_analysis
+
+from ai_analyst import generate_security_assessment
+
+from reporter import (
+    save_json,
+    save_csv
+)
+
+from history import (
+    save_history,
+    compare_last_scan
+)
+
+from change_detector import (
+    compare_current_with_baseline,
+    print_change_report
+)
+
+from discovery import (
+    get_local_network,
+    discover_hosts
+)
+
+from host_profiler import (
+    generate_host_profiles,
+    print_host_profiles,
+    summarize_host_profiles
+)
+
+from host_services import (
+    profile_host_services,
+    print_service_profiles,
+    summarize_services
+)
+
+from host_ml_engine import (
+    enrich_network_with_ml,
+    print_host_ml_report
+)
+
+from correlation_engine import (
+    correlate_network,
+    print_correlation_report
+)
+
 
 init(autoreset=True)
 
-show_banner()
 
-target = input("Enter Target IP or Domain: ").strip()
+# ============================================================
+# TARGET / HOST
+# ============================================================
 
-start_port = int(input("Enter Start Port: "))
-end_port = int(input("Enter End Port: "))
+def resolve_target(target):
 
-print(f"\nScanning Target: {target}")
-print("-" * 50)
+    target = target.strip()
 
-start_time = time.time()
+    if not target:
+        return None
 
-open_ports = []
+    try:
 
-try:
-    target_ip = socket.gethostbyname(target)
-    print(f"Resolved IP: {target_ip}\n")
+        ip = socket.gethostbyname(
+            target
+        )
 
-    for port in range(start_port, end_port + 1):
+        return ip
 
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(0.1)
+    except (
+        socket.gaierror,
+        socket.herror,
+        OSError
+    ):
 
-        result = sock.connect_ex((target_ip, port))
+        return None
 
-        if result == 0:
-            service = get_service_name(port)
 
-            print(f"[OPEN] Port {port:<5} Service: {service}")
-            open_ports.append((port, service))
+def get_hostname(ip):
+
+    try:
+
+        hostname = socket.gethostbyaddr(
+            ip
+        )[0]
+
+        return (
+            hostname,
+            "reverse_dns"
+        )
+
+    except (
+        socket.herror,
+        socket.gaierror,
+        OSError
+    ):
+
+        return (
+            "Unknown",
+            "Unknown"
+        )
+
+
+# ============================================================
+# PORT VALIDATION
+# ============================================================
+
+def validate_ports(
+    start,
+    end
+):
+
+    try:
+
+        start = int(start)
+        end = int(end)
+
+    except ValueError:
+
+        return False
+
+    if start < 1 or end > 65535:
+
+        return False
+
+    if start > end:
+
+        return False
+
+    return True
+
+
+# ============================================================
+# PORT SCANNER
+# ============================================================
+
+def scan_port(
+    ip,
+    port,
+    timeout=DEFAULT_TIMEOUT
+):
+
+    sock = socket.socket(
+        socket.AF_INET,
+        socket.SOCK_STREAM
+    )
+
+    sock.settimeout(
+        timeout
+    )
+
+    start_time = time.time()
+
+    try:
+
+        result = sock.connect_ex(
+            (
+                ip,
+                port
+            )
+        )
+
+        elapsed = (
+            time.time()
+            - start_time
+        )
+
+        if result != 0:
+
+            return None
+
+        service = get_service_name(
+            port
+        )
+
+        banner = get_banner(
+            ip,
+            port
+        )
+
+        return {
+
+            "port":
+                port,
+
+            "protocol":
+                "TCP",
+
+            "service":
+                service,
+
+            "state":
+                "open",
+
+            "banner":
+                banner,
+
+            "latency_ms":
+                round(
+                    elapsed * 1000,
+                    2
+                )
+
+        }
+
+    except (
+        socket.timeout,
+        OSError
+    ):
+
+        return None
+
+    finally:
 
         sock.close()
 
-except socket.gaierror:
-    print("Error: Invalid Hostname or Domain.")
 
-except KeyboardInterrupt:
-    print("\nScan Interrupted by User.")
+# ============================================================
+# TARGET SCAN
+# ============================================================
 
-except Exception as e:
-    print(f"Unexpected Error: {e}")
+def scan_target(
+    ip,
+    ports,
+    timeout=DEFAULT_TIMEOUT,
+    workers=DEFAULT_WORKERS
+):
 
-end_time = time.time()
+    results = []
 
-print("\n" + "=" * 50)
-print("Scan Completed")
-print("=" * 50)
+    total = len(
+        ports
+    )
 
-print(f"Target       : {target}")
-print(f"Ports Scanned: {start_port} - {end_port}")
-print(f"Open Ports   : {len(open_ports)}")
-print(f"Time Taken   : {end_time - start_time:.2f} seconds")
+    completed = 0
 
-if open_ports:
-    print("\nOpen Port List:")
-    for port, service in open_ports:
-        print(f" - Port {port} ({service})")
-else:
-    print("\nNo Open Ports Found.")
+    with ThreadPoolExecutor(
+        max_workers=workers
+    ) as executor:
 
-save_report(target, open_ports, end_time - start_time)
+        futures = {
+            executor.submit(
+                scan_port,
+                ip,
+                port,
+                timeout
+            ): port
 
-print("\nReport saved to results/scan_results.txt")
+            for port in ports
+        }
+
+        for future in as_completed(
+            futures
+        ):
+
+            completed += 1
+
+            try:
+
+                result = future.result()
+
+                if result:
+
+                    results.append(
+                        result
+                    )
+
+                    print(
+                        Fore.GREEN
+                        + f"[OPEN] "
+                        f"{result['port']} "
+                        f"{result['service']}"
+                    )
+
+                    if result.get(
+                        "banner"
+                    ):
+
+                        print(
+                            "       Banner: "
+                            + str(
+                                result[
+                                    "banner"
+                                ]
+                            )[:250]
+                        )
+
+            except Exception as error:
+
+                print(
+                    Fore.RED
+                    + f"Scan error: {error}"
+                )
+
+            percentage = (
+                completed
+                / total
+                * 100
+            )
+
+            print(
+                f"Scanning: "
+                f"{completed}/{total} "
+                f"({percentage:.1f}%)",
+                end="\r"
+            )
+
+    print()
+
+    results.sort(
+        key=lambda item:
+            item["port"]
+    )
+
+    return results
+
+
+# ============================================================
+# SECURITY FINDINGS
+# ============================================================
+
+def print_findings(
+    findings,
+    risk_score
+):
+
+    print()
+
+    score = float(risk_score)
+
+    if score == 0:
+        status = "CLEAN"
+        status_symbol = "✓"
+    elif score < 30:
+        status = "LOW RISK"
+        status_symbol = "!"
+    elif score < 60:
+        status = "MODERATE"
+        status_symbol = "!"
+    else:
+        status = "HIGH RISK"
+        status_symbol = "!"
+
+    def analysis_row(label, value):
+        content = f" {label:<13}{str(value)}"
+        return (
+            Fore.CYAN
+            + "║"
+            + content[:58].ljust(58)
+            + "║"
+            + Style.RESET_ALL
+        )
+
+    print(
+        Fore.CYAN
+        + "╔══════════════════════════════════════════════════════════╗"
+        + Style.RESET_ALL
+    )
+
+    print(
+        Fore.CYAN
+        + "║"
+        + Style.BRIGHT
+        + "                  SECURITY ANALYSIS                       "
+        + Style.RESET_ALL
+        + Fore.CYAN
+        + "║"
+        + Style.RESET_ALL
+    )
+
+    print(
+        Fore.CYAN
+        + "╠══════════════════════════════════════════════════════════╣"
+        + Style.RESET_ALL
+    )
+
+    print(
+        analysis_row(
+            "RISK SCORE",
+            f"{risk_score} / 100"
+        )
+    )
+
+    print(
+        analysis_row(
+            "STATUS",
+            f"{status_symbol} {status}"
+        )
+    )
+
+    print(
+        Fore.CYAN
+        + "╚══════════════════════════════════════════════════════════╝"
+        + Style.RESET_ALL
+    )
+
+    print()
+
+    if not findings:
+
+        print(
+            Fore.GREEN
+            + "╭──────────────── FINDINGS ────────────────────────────────╮"
+        )
+
+        print(
+            Fore.GREEN
+            + "│ ✓ No security findings detected                          │"
+        )
+
+        print(
+            Fore.GREEN
+            + "╰──────────────────────────────────────────────────────────╯"
+            + Style.RESET_ALL
+        )
+
+        return
+
+    print(
+        Fore.YELLOW
+        + f"[!] {len(findings)} security finding(s) detected."
+        + Style.RESET_ALL
+    )
+
+    for index, finding in enumerate(
+        findings,
+        start=1
+    ):
+
+        severity = finding.get(
+            "severity",
+            "Info"
+        )
+
+        port = finding.get(
+            "port",
+            "Unknown"
+        )
+
+        service = finding.get(
+            "service",
+            "Unknown"
+        )
+
+        recommendation = finding.get(
+            "recommendation",
+            "Review exposure."
+        )
+
+        print()
+
+        print(
+            Fore.YELLOW
+            + "╭──────────────────────────────────────────────────────────╮"
+        )
+
+        print(
+            Fore.YELLOW
+            + f"│ [{index:02d}] [{severity.upper()}] PORT {port} / {service}"
+        )
+
+        print(
+            Fore.YELLOW
+            + "├──────────────────────────────────────────────────────────┤"
+        )
+
+        evidence_list = finding.get(
+            "evidence",
+            []
+        )
+
+        if evidence_list:
+
+            for evidence in evidence_list:
+
+                line = str(evidence)[:52]
+
+                print(
+                    Fore.YELLOW
+                    + f"│ Evidence: {line:<47} │"
+                )
+
+        action = str(recommendation)[:49]
+
+        print(
+            Fore.YELLOW
+            + f"│ Action  : {action:<47} │"
+        )
+
+        print(
+            Fore.YELLOW
+            + "╰──────────────────────────────────────────────────────────╯"
+            + Style.RESET_ALL
+        )
+
+
+# ============================================================
+# TOP FINDINGS
+# ============================================================
+
+def print_top_findings(
+    findings
+):
+
+    print()
+
+    print(
+        Fore.MAGENTA
+        + "╔══════════════════════════════════════════════════════════╗"
+        + Style.RESET_ALL
+    )
+
+    print(
+        Fore.MAGENTA
+        + "║"
+        + Style.BRIGHT
+        + "                TOP SECURITY FINDINGS                     "
+        + Style.RESET_ALL
+        + Fore.MAGENTA
+        + "║"
+        + Style.RESET_ALL
+    )
+
+    print(
+        Fore.MAGENTA
+        + "╠══════════════════════════════════════════════════════════╣"
+        + Style.RESET_ALL
+    )
+
+    if not findings:
+
+        print(
+            Fore.GREEN
+            + "║ ✓ No security findings require attention.               ║"
+            + Style.RESET_ALL
+        )
+
+        print(
+            Fore.MAGENTA
+            + "╚══════════════════════════════════════════════════════════╝"
+            + Style.RESET_ALL
+        )
+
+        return
+
+    top = get_top_findings(
+        findings
+    )
+
+    for index, finding in enumerate(
+        top,
+        start=1
+    ):
+
+        severity = str(
+            finding.get(
+                "severity",
+                "Info"
+            )
+        ).upper()
+
+        port = finding.get(
+            "port",
+            "Unknown"
+        )
+
+        service = finding.get(
+            "service",
+            "Unknown"
+        )
+
+        content = (
+            f" {index}. [{severity}] "
+            f"PORT {port} - {service}"
+        )
+
+        print(
+            Fore.MAGENTA
+            + "║"
+            + content[:58].ljust(58)
+            + "║"
+            + Style.RESET_ALL
+        )
+
+    print(
+        Fore.MAGENTA
+        + "╚══════════════════════════════════════════════════════════╝"
+        + Style.RESET_ALL
+    )
+
+
+# ============================================================
+# ML DISPLAY
+# ============================================================
+
+def print_ml_analysis(
+    ml_result
+):
+
+    print()
+
+    status = str(
+        ml_result.get(
+            "status",
+            "Unknown"
+        )
+    )
+
+    prediction = ml_result.get(
+        "prediction",
+        "Unknown"
+    )
+
+    anomaly_score = ml_result.get(
+        "anomaly_score",
+        0
+    )
+
+    training = ml_result.get(
+        "training",
+        {}
+    )
+
+    samples = training.get(
+        "samples",
+        0
+    )
+
+    message = ml_result.get(
+        "message",
+        "No ML analysis message available."
+    )
+
+    if status.lower() == "normal":
+
+        status_icon = "✓"
+        status_color = Fore.GREEN
+
+    elif status.lower() in (
+        "warning",
+        "suspicious"
+    ):
+
+        status_icon = "!"
+        status_color = Fore.YELLOW
+
+    else:
+
+        status_icon = "!"
+        status_color = Fore.RED
+
+    def ml_row(label, value):
+
+        content = (
+            f" {label:<16}"
+            f"{str(value)}"
+        )
+
+        return (
+            Fore.BLUE
+            + "║"
+            + Style.RESET_ALL
+            + content[:58].ljust(58)
+            + Fore.BLUE
+            + "║"
+            + Style.RESET_ALL
+        )
+
+    print(
+        Fore.BLUE
+        + "╔══════════════════════════════════════════════════════════╗"
+        + Style.RESET_ALL
+    )
+
+    print(
+        Fore.BLUE
+        + "║"
+        + Style.BRIGHT
+        + "                ML THREAT INTELLIGENCE                    "
+        + Style.RESET_ALL
+        + Fore.BLUE
+        + "║"
+        + Style.RESET_ALL
+    )
+
+    print(
+        Fore.BLUE
+        + "╠══════════════════════════════════════════════════════════╣"
+        + Style.RESET_ALL
+    )
+
+    print(
+        Fore.BLUE
+        + "║ STATUS          "
+        + status_color
+        + f"{status_icon} {status}"
+        + Style.RESET_ALL
+        + " " * max(
+            0,
+            41 - len(
+                f"{status_icon} {status}"
+            )
+        )
+        + Fore.BLUE
+        + "║"
+        + Style.RESET_ALL
+    )
+
+    print(
+        ml_row(
+            "PREDICTION",
+            prediction
+        )
+    )
+
+    print(
+        ml_row(
+            "ANOMALY SCORE",
+            anomaly_score
+        )
+    )
+
+    print(
+        ml_row(
+            "ML SAMPLES",
+            samples
+        )
+    )
+
+    print(
+        Fore.BLUE
+        + "╠══════════════════════════════════════════════════════════╣"
+        + Style.RESET_ALL
+    )
+
+    message_line = str(message)[:56]
+
+    print(
+        Fore.BLUE
+        + "║ "
+        + message_line.ljust(57)
+        + "║"
+        + Style.RESET_ALL
+    )
+
+    print(
+        Fore.BLUE
+        + "╚══════════════════════════════════════════════════════════╝"
+        + Style.RESET_ALL
+    )
+
+
+# ============================================================
+# HYBRID DISPLAY
+# ============================================================
+
+def print_hybrid_analysis(
+    hybrid
+):
+
+    print()
+
+    rule_score = hybrid.get(
+        "rule_score",
+        0
+    )
+
+    ml_score = hybrid.get(
+        "ml_anomaly_score",
+        0
+    )
+
+    hybrid_score = hybrid.get(
+        "hybrid_score",
+        0
+    )
+
+    risk_level = str(
+        hybrid.get(
+            "risk_level",
+            "Info"
+        )
+    )
+
+    ml_status = hybrid.get(
+        "ml_status",
+        "Unknown"
+    )
+
+    risk_lower = risk_level.lower()
+
+    if risk_lower in (
+        "info",
+        "low"
+    ):
+
+        risk_icon = "✓"
+        risk_color = Fore.GREEN
+
+    elif risk_lower in (
+        "medium",
+        "moderate"
+    ):
+
+        risk_icon = "!"
+        risk_color = Fore.YELLOW
+
+    else:
+
+        risk_icon = "!"
+        risk_color = Fore.RED
+
+    def hybrid_row(label, value):
+
+        content = (
+            f" {label:<16}"
+            f"{str(value)}"
+        )
+
+        return (
+            Fore.MAGENTA
+            + "║"
+            + Style.RESET_ALL
+            + content[:58].ljust(58)
+            + Fore.MAGENTA
+            + "║"
+            + Style.RESET_ALL
+        )
+
+    print(
+        Fore.MAGENTA
+        + "╔══════════════════════════════════════════════════════════╗"
+        + Style.RESET_ALL
+    )
+
+    print(
+        Fore.MAGENTA
+        + "║"
+        + Style.BRIGHT
+        + "                 HYBRID RISK ENGINE                       "
+        + Style.RESET_ALL
+        + Fore.MAGENTA
+        + "║"
+        + Style.RESET_ALL
+    )
+
+    print(
+        Fore.MAGENTA
+        + "╠══════════════════════════════════════════════════════════╣"
+        + Style.RESET_ALL
+    )
+
+    print(
+        hybrid_row(
+            "RULE RISK",
+            f"{rule_score} / 100"
+        )
+    )
+
+    print(
+        hybrid_row(
+            "ML SIGNAL",
+            f"{ml_score} / 100"
+        )
+    )
+
+    print(
+        hybrid_row(
+            "HYBRID SCORE",
+            f"{hybrid_score} / 100"
+        )
+    )
+
+    print(
+        Fore.MAGENTA
+        + "║ RISK LEVEL      "
+        + risk_color
+        + f"{risk_icon} {risk_level}"
+        + Style.RESET_ALL
+        + " " * max(
+            0,
+            41 - len(
+                f"{risk_icon} {risk_level}"
+            )
+        )
+        + Fore.MAGENTA
+        + "║"
+        + Style.RESET_ALL
+    )
+
+    print(
+        hybrid_row(
+            "ML STATUS",
+            ml_status
+        )
+    )
+
+    print(
+        Fore.MAGENTA
+        + "╚══════════════════════════════════════════════════════════╝"
+        + Style.RESET_ALL
+    )
+
+
+# ============================================================
+# AI DISPLAY
+# ============================================================
+
+def print_ai_assessment(
+    assessment
+):
+
+    print()
+
+    risk_level = str(
+        assessment.get(
+            "risk_level",
+            "Info"
+        )
+    )
+
+    hybrid_score = assessment.get(
+        "hybrid_score",
+        0
+    )
+
+    summary = str(
+        assessment.get(
+            "summary",
+            "No summary available."
+        )
+    )
+
+    top_issue = assessment.get(
+        "top_issue"
+    )
+
+    recommendations = assessment.get(
+        "recommendations",
+        []
+    )
+
+    risk_lower = risk_level.lower()
+
+    if risk_lower in (
+        "info",
+        "low"
+    ):
+
+        risk_icon = "✓"
+        risk_color = Fore.GREEN
+
+    elif risk_lower in (
+        "medium",
+        "moderate"
+    ):
+
+        risk_icon = "!"
+        risk_color = Fore.YELLOW
+
+    else:
+
+        risk_icon = "!"
+        risk_color = Fore.RED
+
+    def box_line(content=""):
+
+        return (
+            Fore.CYAN
+            + "║ "
+            + str(content)[:56].ljust(56)
+            + " ║"
+            + Style.RESET_ALL
+        )
+
+    print(
+        Fore.CYAN
+        + "╔══════════════════════════════════════════════════════════╗"
+        + Style.RESET_ALL
+    )
+
+    print(
+        Fore.CYAN
+        + "║"
+        + Style.BRIGHT
+        + "                  AI SECURITY ANALYST                     "
+        + Style.RESET_ALL
+        + Fore.CYAN
+        + "║"
+        + Style.RESET_ALL
+    )
+
+    print(
+        Fore.CYAN
+        + "╠══════════════════════════════════════════════════════════╣"
+        + Style.RESET_ALL
+    )
+
+    print(
+        Fore.CYAN
+        + "║ RISK LEVEL      "
+        + risk_color
+        + f"{risk_icon} {risk_level}"
+        + Style.RESET_ALL
+        + " " * max(
+            0,
+            41 - len(
+                f"{risk_icon} {risk_level}"
+            )
+        )
+        + Fore.CYAN
+        + "║"
+        + Style.RESET_ALL
+    )
+
+    print(
+        box_line(
+            f"HYBRID SCORE    {hybrid_score} / 100"
+        )
+    )
+
+    print(
+        Fore.CYAN
+        + "╠══════════════════════════════════════════════════════════╣"
+        + Style.RESET_ALL
+    )
+
+    print(
+        box_line(
+            "ASSESSMENT"
+        )
+    )
+
+    words = summary.split()
+    lines = []
+    current = ""
+
+    for word in words:
+
+        if len(current) + len(word) + 1 > 54:
+
+            lines.append(
+                current
+            )
+
+            current = word
+
+        else:
+
+            if current:
+
+                current += " "
+
+            current += word
+
+    if current:
+
+        lines.append(
+            current
+        )
+
+    for line in lines[:4]:
+
+        print(
+            box_line(
+                line
+            )
+        )
+
+    if top_issue:
+
+        print(
+            Fore.CYAN
+            + "╠══════════════════════════════════════════════════════════╣"
+            + Style.RESET_ALL
+        )
+
+        print(
+            box_line(
+                "TOP ISSUE"
+            )
+        )
+
+        port = top_issue.get(
+            "port",
+            "Unknown"
+        )
+
+        service = top_issue.get(
+            "service",
+            "Unknown"
+        )
+
+        severity = top_issue.get(
+            "severity",
+            "Info"
+        )
+
+        priority = top_issue.get(
+            "priority",
+            "Informational"
+        )
+
+        print(
+            box_line(
+                f"PORT          {port}"
+            )
+        )
+
+        print(
+            box_line(
+                f"SERVICE       {service}"
+            )
+        )
+
+        print(
+            box_line(
+                f"SEVERITY      {severity}"
+            )
+        )
+
+        print(
+            box_line(
+                f"PRIORITY      {priority}"
+            )
+        )
+
+        impact = str(
+            top_issue.get(
+                "impact",
+                "No impact information."
+            )
+        )
+
+        action = str(
+            top_issue.get(
+                "action",
+                "Review the finding."
+            )
+        )
+
+        print(
+            box_line(
+                f"IMPACT: {impact}"
+            )
+        )
+
+        print(
+            box_line(
+                f"ACTION: {action}"
+            )
+        )
+
+    if recommendations:
+
+        print(
+            Fore.CYAN
+            + "╠══════════════════════════════════════════════════════════╣"
+            + Style.RESET_ALL
+        )
+
+        print(
+            box_line(
+                "PRIORITIZED RECOMMENDATIONS"
+            )
+        )
+
+        for index, recommendation in enumerate(
+            recommendations[:3],
+            start=1
+        ):
+
+            recommendation = str(
+                recommendation
+            )
+
+            print(
+                box_line(
+                    f"{index}. {recommendation}"
+                )
+            )
+
+    print(
+        Fore.CYAN
+        + "╚══════════════════════════════════════════════════════════╝"
+        + Style.RESET_ALL
+    )
+
+
+# ============================================================
+# PORT SCAN
+# ============================================================
+
+def run_scan():
+
+    print()
+
+    target = input(
+        "Enter Target IP or Domain: "
+    ).strip()
+
+    resolved_ip = resolve_target(
+        target
+    )
+
+    if not resolved_ip:
+
+        print(
+            Fore.RED
+            + "Could not resolve target."
+        )
+
+        return
+
+    hostname, hostname_source = (
+        get_hostname(
+            resolved_ip
+        )
+    )
+
+    print()
+
+    print(
+        "Profiles: "
+        "quick / common / full / custom"
+    )
+
+    profile = input(
+        "Choose profile: "
+    ).strip().lower()
+
+    if profile not in PROFILES and profile != "custom":
+
+        print(
+            Fore.RED
+            + "Invalid profile."
+        )
+
+        return
+
+    if profile == "custom":
+
+        start_port = input(
+            "Enter Start Port: "
+        ).strip()
+
+        end_port = input(
+            "Enter End Port: "
+        ).strip()
+
+        if not validate_ports(
+            start_port,
+            end_port
+        ):
+
+            print(
+                Fore.RED
+                + "Invalid port range."
+            )
+
+            return
+
+        start_port = int(
+            start_port
+        )
+
+        end_port = int(
+            end_port
+        )
+
+        profile_config = PROFILES[
+            "custom"
+        ]
+
+    else:
+
+        profile_config = PROFILES[
+            profile
+        ]
+
+        start_port = profile_config[
+            "start"
+        ]
+
+        end_port = profile_config[
+            "end"
+        ]
+
+    ports = list(
+        range(
+            start_port,
+            end_port + 1
+        )
+    )
+
+    scan_timeout = profile_config.get(
+        "timeout",
+        DEFAULT_TIMEOUT
+    )
+
+    scan_workers = profile_config.get(
+        "workers",
+        DEFAULT_WORKERS
+    )
+
+    print(
+        f"Target       : {target}"
+    )
+
+    print(
+        f"Resolved IP  : {resolved_ip}"
+    )
+
+    print(
+        f"Hostname     : {hostname}"
+    )
+
+    print(
+        f"Hostname Src : {hostname_source}"
+    )
+
+    print(
+        "-" * 60
+    )
+
+    start_time = time.time()
+
+    open_ports = scan_target(
+        resolved_ip,
+        ports,
+        timeout=scan_timeout,
+        workers=scan_workers
+    )
+
+    elapsed = (
+        time.time()
+        - start_time
+    )
+
+    # ========================================================
+    # ANALYSIS
+    # ========================================================
+
+    scan_data = {
+
+        "target":
+            target,
+
+        "resolved_ip":
+            resolved_ip,
+
+        "hostname":
+            hostname,
+
+        "hostname_source":
+            hostname_source,
+
+        "open_ports":
+            open_ports
+
+    }
+
+    findings = analyze_scan(
+        open_ports
+    )
+
+    findings = deduplicate_findings(
+        findings
+    )
+
+    risk_score = calculate_risk(
+        findings
+    )
+
+    # ========================================================
+    # SUMMARY
+    # ========================================================
+
+    scanned_ports = set(
+        ports
+    )
+
+    open_port_numbers = {
+        item["port"]
+        for item in open_ports
+    }
+
+    closed_ports = sorted(
+        scanned_ports
+        - open_port_numbers
+    )
+
+    print()
+
+    print()
+
+    def summary_row(label, value):
+        content = f" {label:<13}{str(value)[:39]}"
+        return (
+            Fore.CYAN
+            + "║"
+            + content[:58].ljust(58)
+            + "║"
+            + Style.RESET_ALL
+        )
+
+    print(
+        Fore.CYAN
+        + "╔══════════════════════════════════════════════════════════╗"
+        + Style.RESET_ALL
+    )
+
+    print(
+        Fore.CYAN
+        + "║"
+        + Style.BRIGHT
+        + "                 SCAN SECURITY OVERVIEW                   "
+        + Style.RESET_ALL
+        + Fore.CYAN
+        + "║"
+        + Style.RESET_ALL
+    )
+
+    print(
+        Fore.CYAN
+        + "╠══════════════════════════════════════════════════════════╣"
+        + Style.RESET_ALL
+    )
+
+    print(summary_row("TARGET", target))
+    print(summary_row("RESOLVED IP", resolved_ip))
+    print(summary_row("PORT RANGE", f"{start_port} - {end_port}"))
+
+    print(
+        Fore.CYAN
+        + "╠══════════════════════════════════════════════════════════╣"
+        + Style.RESET_ALL
+    )
+
+    print(summary_row("OPEN PORTS", len(open_ports)))
+    print(summary_row("CLOSED PORTS", len(closed_ports)))
+    print(summary_row("RISK SCORE", f"{risk_score} / 100"))
+    print(summary_row("SCAN TIME", f"{elapsed:.2f}s"))
+
+    print(
+        Fore.CYAN
+        + "╚══════════════════════════════════════════════════════════╝"
+        + Style.RESET_ALL
+    )
+
+    if closed_ports:
+
+        closed_count = len(
+            closed_ports
+        )
+
+        print(
+            f"Closed Ports  : "
+            f"{closed_count}"
+        )
+
+        if closed_count <= 20:
+
+            print(
+                f"Closed List   : "
+                f"{closed_ports}"
+            )
+
+        else:
+
+            print(
+                "Closed List   : "
+                "Hidden (too many ports)"
+            )
+
+    # ========================================================
+    # FINDINGS
+    # ========================================================
+
+    print_findings(
+        findings,
+        risk_score
+    )
+
+    print_top_findings(
+        findings
+    )
+
+    # ========================================================
+    # ML
+    # ========================================================
+
+    ml_result = analyze_with_history(
+        scan_data
+    )
+
+    print_ml_analysis(
+        ml_result
+    )
+
+    # ========================================================
+    # HYBRID
+    # ========================================================
+
+    hybrid = generate_hybrid_analysis(
+        risk_score,
+        ml_result
+    )
+
+    print_hybrid_analysis(
+        hybrid
+    )
+
+    # ========================================================
+    # AI ANALYST
+    # ========================================================
+
+    assessment = generate_security_assessment(
+        findings,
+        hybrid
+    )
+
+    print_ai_assessment(
+        assessment
+    )
+
+    # ========================================================
+    # REPORT
+    # ========================================================
+
+    report = {
+
+        "target":
+            target,
+
+        "resolved_ip":
+            resolved_ip,
+
+        "hostname":
+            hostname,
+
+        "hostname_source":
+            hostname_source,
+
+        "ports_scanned":
+            {
+                "start":
+                    start_port,
+
+                "end":
+                    end_port,
+
+                "count":
+                    len(ports)
+            },
+
+        "open_ports":
+            open_ports,
+
+        "closed_ports":
+            closed_ports,
+
+        "findings":
+            findings,
+
+        "risk_score":
+            risk_score,
+
+        "ml_analysis":
+            ml_result,
+
+        "hybrid_analysis":
+            hybrid,
+
+        "ai_assessment":
+            assessment,
+
+        "scan_time_seconds":
+            round(
+                elapsed,
+                4
+            )
+
+    }
+
+    # ========================================================
+    # HISTORY + CHANGE INTELLIGENCE
+    # ========================================================
+
+    # Legacy history comparison
+    comparison = compare_last_scan(
+        report
+    )
+
+    report[
+        "history_comparison"
+    ] = comparison
+
+
+    # Advanced baseline/change detection
+    change_intelligence = (
+        compare_current_with_baseline(
+            report
+        )
+    )
+
+    report[
+        "change_intelligence"
+    ] = change_intelligence
+
+
+    # Display change intelligence
+    print_change_report(
+        change_intelligence
+    )
+
+
+    # Save current scan only AFTER comparison
+    save_history(
+        report
+    )
+
+    # ========================================================
+    # REPORT FILES
+    # ========================================================
+
+    json_file = save_json(
+        report
+    )
+
+    csv_file = save_csv(
+        open_ports
+    )
+
+    print()
+
+    print(
+        Fore.YELLOW
+        + f"JSON report : {json_file}"
+    )
+
+    print(
+        Fore.YELLOW
+        + f"CSV report  : {csv_file}"
+    )
+
+
+# ============================================================
+# LOCAL NETWORK DISCOVERY
+# ============================================================
+
+def run_discovery():
+
+    width = 66
+
+    def border():
+        print("╔" + "═" * width + "╗")
+
+    def divider():
+        print("╠" + "═" * width + "╣")
+
+    def bottom():
+        print("╚" + "═" * width + "╝")
+
+    def row(text=""):
+        print("║ " + str(text)[:width - 2].ljust(width - 2) + " ║")
+
+    print()
+
+    # ========================================================
+    # DISCOVERY HEADER
+    # ========================================================
+
+    border()
+    row("LOCAL NETWORK DISCOVERY")
+    row("SentinelX Network Intelligence Engine")
+    divider()
+    row("STATUS : READY")
+    bottom()
+
+    print()
+
+    network = input(
+        Fore.CYAN
+        + "Enter authorized local subnet "
+        + "(Enter for auto): "
+        + Style.RESET_ALL
+    ).strip()
+
+    if not network:
+
+        network = get_local_network()
+
+    if not network:
+
+        print()
+
+        border()
+        row("NETWORK DETECTION FAILED")
+        divider()
+        row("Could not determine the local network.")
+        row("Specify an authorized subnet manually.")
+        bottom()
+
+        return
+
+    print()
+
+    border()
+    row("NETWORK TARGET")
+    divider()
+    row(f"SUBNET        : {network}")
+    row("DISCOVERY     : HOST AVAILABILITY DETECTION")
+    bottom()
+
+    print()
+    print(
+        Fore.CYAN
+        + "[*] Discovering responding hosts..."
+        + Style.RESET_ALL
+    )
+
+    hosts = discover_hosts(
+        network
+    )
+
+    print()
+
+    if not hosts:
+
+        border()
+        row("DISCOVERY RESULT")
+        divider()
+        row("STATUS        : NO RESPONDING HOSTS")
+        row("RESULT        : 0 hosts discovered")
+        bottom()
+
+        return
+
+    print()
+
+    host_count = len(hosts)
+
+    border()
+    row("NETWORK DISCOVERY COMPLETE")
+    divider()
+    row(f"RESPONDING HOSTS : {host_count}")
+    row(f"NETWORK          : {network}")
+    row("STATUS           : ✓ HOSTS DETECTED")
+    divider()
+
+    if host_count == 1:
+        row("ANALYSIS READY   : 1 HOST READY FOR PROFILING")
+    else:
+        row(
+            f"ANALYSIS READY   : {host_count} HOSTS READY "
+            "FOR PROFILING"
+        )
+
+    bottom()
+
+    # ========================================================
+    # HOST PROFILING
+    # ========================================================
+
+    print()
+
+    print(
+        Fore.CYAN
+        + "[*] Building host intelligence profiles..."
+        + Style.RESET_ALL
+    )
+
+    host_profiles = generate_host_profiles(
+        hosts
+    )
+
+    print()
+
+    print_host_profiles(
+        host_profiles
+    )
+
+    # ========================================================
+    # SERVICE INTELLIGENCE
+    # ========================================================
+
+    print()
+
+    print(
+        Fore.CYAN
+        + "[*] Enumerating common TCP services..."
+        + Style.RESET_ALL
+    )
+
+    service_profiles = profile_host_services(
+        host_profiles
+    )
+
+    print()
+
+    print_service_profiles(
+        service_profiles
+    )
+
+    # ========================================================
+    # SERVICE SUMMARY
+    # ========================================================
+
+    service_summary = summarize_services(
+        service_profiles
+    )
+
+    print()
+
+    border()
+    row("NETWORK SERVICE INTELLIGENCE")
+    divider()
+    row(
+        f"HOSTS ANALYZED       : "
+        f"{service_summary['total_hosts']}"
+    )
+    row(
+        f"HOSTS WITH SERVICES  : "
+        f"{service_summary['hosts_with_services']}"
+    )
+    row(
+        f"OPEN SERVICES        : "
+        f"{service_summary['total_open_ports']}"
+    )
+
+    service_counts = service_summary[
+        "service_counts"
+    ]
+
+    if service_counts:
+
+        divider()
+        row("DETECTED SERVICES")
+
+        for service, count in sorted(
+            service_counts.items()
+        ):
+
+            row(
+                f"{service:<20} {count}"
+            )
+
+    bottom()
+
+    # ========================================================
+    # SECURITY CORRELATION
+    # ========================================================
+
+    print()
+
+    print(
+        Fore.CYAN
+        + "[*] Running network security correlation..."
+        + Style.RESET_ALL
+    )
+
+    correlation = correlate_network(
+        hosts,
+        host_profiles=host_profiles,
+        service_profiles=service_profiles
+    )
+
+    print()
+
+    print_correlation_report(
+        correlation
+    )
+
+    # ========================================================
+    # NETWORK ML + HYBRID INTELLIGENCE
+    # ========================================================
+
+    print()
+    print(
+        Fore.CYAN
+        + "[*] Running network ML + hybrid intelligence..."
+        + Style.RESET_ALL
+    )
+
+    network_ml = enrich_network_with_ml(
+        correlation
+    )
+
+    print_host_ml_report(
+        network_ml
+    )
+
+    # Keep ML-enriched result as the final network result
+    correlation = network_ml
+
+    # ========================================================
+    # NETWORK PROFILE SUMMARY
+    # ========================================================
+
+    profile_summary = summarize_host_profiles(
+        correlation[
+            "hosts"
+        ]
+    )
+
+    print()
+
+    border()
+    row("NETWORK SECURITY OVERVIEW")
+    divider()
+    row(
+        f"TOTAL HOSTS          : "
+        f"{profile_summary['total_hosts']}"
+    )
+    row(
+        f"CRITICAL HOSTS       : "
+        f"{profile_summary['critical_hosts']}"
+    )
+    row(
+        f"HIGH-RISK HOSTS      : "
+        f"{profile_summary['high_risk_hosts']}"
+    )
+    row(
+        f"MEDIUM-RISK HOSTS    : "
+        f"{profile_summary['medium_risk_hosts']}"
+    )
+    row(
+        f"LOW-RISK HOSTS       : "
+        f"{profile_summary['low_risk_hosts']}"
+    )
+    row(
+        f"INFO HOSTS           : "
+        f"{profile_summary['info_hosts']}"
+    )
+
+    divider()
+
+    row(
+        f"TOTAL OPEN PORTS     : "
+        f"{profile_summary['total_open_ports']}"
+    )
+    row(
+        f"TOTAL FINDINGS       : "
+        f"{profile_summary['total_findings']}"
+    )
+    row(
+        f"NETWORK RISK         : "
+        f"{profile_summary['network_risk']}"
+    )
+
+    bottom()
+
+    print()
+
+    print(
+        Fore.GREEN
+        + Style.BRIGHT
+        + "[✓] Network security analysis complete."
+        + Style.RESET_ALL
+    )
+
+
+# ============================================================
+# MAIN MENU
+# ============================================================
+def show_main_menu():
+
+    cyan = Fore.CYAN + Style.BRIGHT
+    green = Fore.GREEN + Style.BRIGHT
+    yellow = Fore.YELLOW + Style.BRIGHT
+    red = Fore.RED + Style.BRIGHT
+    white = Fore.WHITE + Style.BRIGHT
+    reset = Style.RESET_ALL
+
+    width = 66
+
+    def line(text="", color=""):
+        print(
+            cyan
+            + "║"
+            + reset
+            + color
+            + text.ljust(width)
+            + reset
+            + cyan
+            + "║"
+            + reset
+        )
+
+    print()
+
+    print(
+        cyan
+        + "╔"
+        + "═" * width
+        + "╗"
+        + reset
+    )
+
+    line(
+        "                 SENTINELX COMMAND CENTER",
+        white
+    )
+
+    print(
+        cyan
+        + "╠"
+        + "═" * width
+        + "╣"
+        + reset
+    )
+
+    line()
+
+    line(
+        "  [ 01 ]  PORT SCAN",
+        green
+    )
+
+    line(
+        "          Analyze a target for exposed ports and services"
+    )
+
+    line()
+
+    line(
+        "  [ 02 ]  LOCAL NETWORK DISCOVERY",
+        yellow
+    )
+
+    line(
+        "          Discover hosts and analyze local network intelligence"
+    )
+
+    line()
+
+    line(
+        "  [ 03 ]  EXIT SYSTEM",
+        red
+    )
+
+    line(
+        "          Close the SentinelX security operations console"
+    )
+
+    line()
+
+    print(
+        cyan
+        + "╠"
+        + "═" * width
+        + "╣"
+        + reset
+    )
+
+    line(
+        " SYSTEM: ONLINE  │  THREAT ENGINE: READY  │  ML: ACTIVE",
+        green
+    )
+
+    print(
+        cyan
+        + "╚"
+        + "═" * width
+        + "╝"
+        + reset
+    )
+
+    print()
+    # ============================================================
+# MAIN APPLICATION
+# ============================================================
+
+def main():
+
+    while True:
+
+        show_banner()
+
+        show_main_menu()
+
+        choice = input(
+            Fore.CYAN
+            + "Select module > "
+            + Style.RESET_ALL
+        ).strip()
+
+        if choice == "1":
+
+            print()
+
+            print(
+                Fore.GREEN
+                + Style.BRIGHT
+                + "[+] Launching Port Scan module..."
+                + Style.RESET_ALL
+            )
+
+            run_scan()
+
+        elif choice == "2":
+
+            print()
+
+            print(
+                Fore.YELLOW
+                + Style.BRIGHT
+                + "[+] Launching Local Network Discovery..."
+                + Style.RESET_ALL
+            )
+
+            run_discovery()
+
+        elif choice == "3":
+
+            print()
+
+            print(
+                Fore.CYAN
+                + Style.BRIGHT
+                + "[*] Shutting down SentinelX Security Console..."
+                + Style.RESET_ALL
+            )
+
+            print()
+
+            break
+
+        else:
+
+            print()
+
+            print(
+                Fore.RED
+                + "[!] Invalid option. Choose 1, 2, or 3."
+                + Style.RESET_ALL
+            )
+
+        if choice != "3":
+
+            print()
+
+            input(
+                Fore.WHITE
+                + "Press Enter to return to Command Center..."
+                + Style.RESET_ALL
+            )
+
+
+# ============================================================
+# ENTRY POINT
+# ============================================================
+
+if __name__ == "__main__":
+
+    main()

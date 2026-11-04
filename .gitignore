@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.bak
+*.pre_*
+.venv/
+venv/
+reports/
+results/
+archive/
+.vscode/

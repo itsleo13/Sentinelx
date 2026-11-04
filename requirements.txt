@@ -1,2 +1,6 @@
 colorama
 tqdm
+psutil
+tabulate
+scapy
+scikit-learn
